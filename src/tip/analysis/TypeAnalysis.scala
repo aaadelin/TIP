@@ -111,9 +111,15 @@ class TypeAnalysis(program: AProgram)(implicit declData: DeclarationData) extend
       case as: AAssignStmt =>
         as.left match {
           case id: AIdentifier => unify(id, as.right);
-          case dw: ADerefWrite => ??? // <--- Complete here
-          case dfw: ADirectFieldWrite => ??? // <--- Complete here
-          case ifw: AIndirectFieldWrite => ??? // <--- Complete here
+          case dw: ADerefWrite => unify(dw.exp, PointerType(as.right))
+          case dfw: ADirectFieldWrite =>
+            unify(RecordType(allFieldNames.map { f =>
+              if (f == dfw.field) VarType(as) else FreshVarType()
+            }), as.right) // <--- Complete here
+          case ifw: AIndirectFieldWrite =>
+            unify(RecordType(allFieldNames.map { f =>
+              if (f == ifw.field) VarType(as) else FreshVarType()
+            }), PointerType(as.right))
         }
       case bin: ABinaryOp =>
         bin.operator match {
@@ -125,11 +131,11 @@ class TypeAnalysis(program: AProgram)(implicit declData: DeclarationData) extend
           case DerefOp => unify(un.subexp, PointerType(un)) // todo
         }
       case alloc: AAlloc => unify(alloc, PointerType(alloc.exp))
-      case ref: AVarRef => ??? // <--- Complete here
+      case ref: AVarRef => unify(ref, PointerType(ref.id))
       case n: ANull => unify(n, PointerType(FreshVarType()));
-      case fun: AFunDeclaration => ???
-      case call: ACallFuncExpr => ??? // <--- Complete here
-      case _: AReturnStmt => ???
+      case fun: AFunDeclaration => unify(fun, FunctionType(fun.params, fun.stmts.ret))
+      case call: ACallFuncExpr => unify(call, FunctionType(call.args, call.targetFun))
+      case _: AReturnStmt =>
       case rec: ARecord =>
         val fieldmap = rec.fields.foldLeft(Map[String, Term[Type]]()) { (a, b) =>
           a + (b.field -> b.exp)
@@ -141,7 +147,7 @@ class TypeAnalysis(program: AProgram)(implicit declData: DeclarationData) extend
         unify(ac.record, RecordType(allFieldNames.map { f =>
           if (f == ac.field) VarType(ac) else FreshVarType()
         }))
-      case _ => ???
+      case _ =>
     }
     visitChildren(node, ())
   }
